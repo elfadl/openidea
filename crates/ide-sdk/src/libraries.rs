@@ -485,7 +485,7 @@ fn go_groups(root: &Path, s: &Settings) -> Vec<LibraryGroup> {
         let module_env = crate::go::module_environment(root, &g.modules);
         let mut env: Vec<(&str, &str)> = module_env.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
         // Listing libraries must stay offline even when module commands use a proxy.
-        env.extend([("GOPROXY", "off"), ("GOTOOLCHAIN", "local")]);
+        env.extend([("GOPROXY", "off")]);
         env.extend(goroot_s.as_deref().map(|v| ("GOROOT", v)));
         env.extend(gopath.as_deref().map(|v| ("GOPATH", v)));
         let mut out = Vec::new();
@@ -500,6 +500,11 @@ fn go_groups(root: &Path, s: &Settings) -> Vec<LibraryGroup> {
                 out.extend(group(name, "go", library_roots(vec![Path::new(dir).join("src")])));
             }
         }
+        let mod_name = ide_run::wrap::go_module(root).map(|(m, _)| m).filter(|m| !m.is_empty());
+        let group_name = match mod_name {
+            Some(m) => format!("Go Modules <{m}>"),
+            None => "Go Modules".into(),
+        };
         let flags = module_env.get("GOFLAGS").map(String::as_str).unwrap_or("");
         let vendor = root.join("vendor");
         let use_vendor = vendor.is_dir()
@@ -508,11 +513,11 @@ fn go_groups(root: &Path, s: &Settings) -> Vec<LibraryGroup> {
         if use_vendor {
             if let Ok(text) = std::fs::read_to_string(vendor.join("modules.txt")) {
                 let modules = vendor_roots(&vendor, &text);
-                out.extend(group("Go Modules", "goModules", named_roots(modules)));
+                out.extend(group(group_name, "goModules", named_roots(modules)));
             }
         } else if let Some(text) = query_in(&go, &["list", "-m", "-e", "-json", "all"], Some(root), &env, GRAPH_TIMEOUT)
         {
-            out.extend(group("Go Modules", "goModules", named_roots(parse_go_modules(&text))));
+            out.extend(group(group_name, "goModules", named_roots(parse_go_modules(&text))));
         }
         out
     })
@@ -532,27 +537,38 @@ fn vendor_roots(vendor: &Path, text: &str) -> Vec<(String, PathBuf)> {
         .collect()
 }
 
-/// `(path@version, dir)` of the downloaded non-main modules in `go list -m -json` output.
+/// `(path version, dir)` of the downloaded non-main modules in `go list -m -json` output.
 pub(crate) fn parse_go_modules(text: &str) -> Vec<(String, PathBuf)> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct Replaced {
+        #[allow(dead_code)]
+        path: Option<String>,
+        #[allow(dead_code)]
+        version: Option<String>,
+        dir: Option<PathBuf>,
+    }
     #[derive(Deserialize)]
     #[serde(rename_all = "PascalCase")]
     struct Module {
         path: String,
         version: Option<String>,
         dir: Option<PathBuf>,
+        replace: Option<Replaced>,
         #[serde(default)]
         main: bool,
     }
     serde_json::Deserializer::from_str(text)
         .into_iter::<Module>()
-        .map_while(Result::ok)
+        .filter_map(Result::ok)
         .filter(|m| !m.main)
         .filter_map(|m| {
             let name = match &m.version {
-                Some(v) => format!("{}@{v}", m.path),
+                Some(v) => format!("{} {v}", m.path),
                 None => m.path.clone(),
             };
-            Some((name, m.dir?))
+            let dir = m.dir.or_else(|| m.replace.and_then(|r| r.dir))?;
+            Some((name, dir))
         })
         .collect()
 }

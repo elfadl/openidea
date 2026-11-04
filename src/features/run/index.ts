@@ -37,6 +37,8 @@ import { registerExternalTools } from "./externalTools";
 import { EditConfigsOverlay } from "./EditConfigsDialog";
 import { openImport } from "./importConfigs";
 import { registerGoActions } from "./goActions";
+import { registerGoBanner } from "./goBanner";
+import { registerGoLens } from "./goLens";
 import { invalidateGoModules } from "./goModules";
 import { RunWidget } from "./RunWidget";
 import { runConfigsRunAnything } from "./runAnything";
@@ -289,6 +291,8 @@ export function activate(): () => void {
     registerRunAnythingProvider(runConfigsRunAnything),
     registerBuiltinTypes(),
     registerGoActions(),
+    registerGoBanner(),
+    registerGoLens(),
     registerOverlay({ id: "run.chooser", component: ConfigChooserOverlay }),
     registerOverlay({ id: "run.editConfigs", component: EditConfigsOverlay }),
     registerOverlay({ id: "run.dialogs", component: RunDialogsOverlay }),

@@ -767,13 +767,22 @@ fn cargo_metadata_lists_registry_packages_only() {
 fn go_modules_skip_the_main_module_and_missing_downloads() {
     let out = r#"{"Path":"example.com/app","Main":true,"Dir":"/p"}
 {"Path":"golang.org/x/text","Version":"v0.14.0","Dir":"/gopath/pkg/mod/golang.org/x/text@v0.14.0"}
-{"Path":"example.com/missing","Version":"v1.0.0","Error":{"Err":"module lookup disabled"}}"#;
+{"Path":"example.com/missing","Version":"v1.0.0","Error":{"Err":"module lookup disabled"}}
+{"Path":"example.com/replaced","Version":"v1.0.0","Replace":{"Path":"example.com/fork","Dir":"/local/fork"}}
+{"Path":"github.com/gorilla/mux","Version":"v1.8.1","Dir":"/gopath/pkg/mod/github.com/gorilla/mux@v1.8.1"}"#;
     assert_eq!(
         crate::libraries::parse_go_modules(out),
-        [(
-            "golang.org/x/text@v0.14.0".to_owned(),
-            std::path::PathBuf::from("/gopath/pkg/mod/golang.org/x/text@v0.14.0")
-        )]
+        [
+            (
+                "golang.org/x/text v0.14.0".to_owned(),
+                std::path::PathBuf::from("/gopath/pkg/mod/golang.org/x/text@v0.14.0")
+            ),
+            ("example.com/replaced v1.0.0".to_owned(), std::path::PathBuf::from("/local/fork")),
+            (
+                "github.com/gorilla/mux v1.8.1".to_owned(),
+                std::path::PathBuf::from("/gopath/pkg/mod/github.com/gorilla/mux@v1.8.1")
+            ),
+        ]
     );
 }
 
@@ -1149,6 +1158,19 @@ fn query_times_out_when_the_child_does_not_exit() {
         std::time::Duration::from_millis(100),
     );
     assert_eq!(out, None);
+}
+
+#[cfg(unix)]
+#[test]
+fn query_keeps_stdout_when_the_command_exits_with_error() {
+    let out = crate::exec::query_in(
+        Path::new("/bin/sh"),
+        &["-c", "printf 'partial output'; exit 1"],
+        None,
+        &[("PATH", "/usr/bin:/bin")],
+        std::time::Duration::from_secs(5),
+    );
+    assert_eq!(out.as_deref(), Some("partial output"));
 }
 
 #[test]

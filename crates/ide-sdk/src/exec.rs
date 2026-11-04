@@ -102,9 +102,6 @@ pub(crate) fn query_in(
             }
         }
     };
-    if !status.success() {
-        return None;
-    }
     // Up to the deadline, or briefly past it for a program that exited just before:
     // a process it left running (a wrapper's background job) can hold the pipes
     // open, or keep writing to them, after it exits.
@@ -120,6 +117,9 @@ pub(crate) fn query_in(
             Ok((_, None)) => open -= 1,
             Err(_) => break,
         }
+    }
+    if !status.success() && out.trim_ascii().is_empty() {
+        return None;
     }
     let text = if out.trim_ascii().is_empty() { err } else { out };
     Some(decode_tool_output(&text).trim().to_owned())

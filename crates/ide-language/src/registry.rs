@@ -601,6 +601,7 @@ mod tests {
         "Angular Template",
         "ERB",
         "JSP",
+        "GoMod",
     ];
 
     fn reg() -> LanguageRegistry {
